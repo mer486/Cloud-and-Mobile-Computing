@@ -1,0 +1,18 @@
+etcd / Raft Results
+
+1. etcdctl put foo bar returned: OK
+2. etcdctl get foo returned:
+foo
+bar
+
+3. Initial leader observed using endpoint status: etcd2
+4. etcd2 was stopped to simulate leader failure.
+5. New leader after failover: etcd1
+
+6. etcdctl put after_failover success returned: OK
+7. etcdctl get after_failover returned:
+after_failover
+success
+
+Observation:
+After the original leader stopped, the remaining etcd nodes elected a new leader and the cluster continued accepting writes.

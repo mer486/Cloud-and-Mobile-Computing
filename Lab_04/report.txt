@@ -1,0 +1,391 @@
+1. Lab Overview
+
+In this lab, I implemented a small cloud-native microservices system using Python Flask and Docker Compose. The system represents a mini e-commerce backend with two services:
+
+product-service
+order-service
+
+The product-service stores product data in an in-memory catalog and exposes product lookup APIs. The order-service receives order requests, calls product-service, validates the product, and returns an order response.
+
+The goal of the lab was to understand microservices, service-to-service communication, container packaging, environment variables, health checks, and failure behavior.
+
+2. System Architecture
+
+The system contains two independent services.
+
+2.1 product-service
+
+The product-service is responsible for product data.
+
+It exposes:
+
+GET /health
+GET /products/<product_id>
+
+The /health endpoint is used to check whether the service is running.
+
+The /products/<product_id> endpoint returns product data such as:
+
+{
+  "id": 1,
+  "name": "Laptop",
+  "price": 1200
+}
+
+If the product does not exist, the service returns:
+
+{
+  "error": "Product not found"
+}
+2.2 order-service
+
+The order-service is responsible for receiving order requests.
+
+It exposes:
+
+GET /health
+POST /orders
+
+When an order request is received, the service calls product-service to check whether the product exists.
+
+Example request:
+
+{
+  "product_id": 1,
+  "quantity": 2
+}
+
+Expected response:
+
+{
+  "message": "Order created",
+  "product": "Laptop",
+  "quantity": 2,
+  "total_price": 2400
+}
+
+This shows synchronous service-to-service communication.
+
+3. Cloud-Native Design Concepts Used
+3.1 Independent Services
+
+Each service has its own:
+
+app.py
+requirements.txt
+Dockerfile
+
+This follows the microservices idea that each service should be independently packaged and deployed.
+
+3.2 Environment Variables
+
+The order-service does not hardcode the product-service address directly inside the code. Instead, it reads it from an environment variable:
+
+PRODUCT_SERVICE_URL = os.getenv("PRODUCT_SERVICE_URL", "http://product-service:5001")
+
+In docker-compose.yml, the value is configured as:
+
+environment:
+  PRODUCT_SERVICE_URL: http://product-service:5001
+
+This is cloud-native because configuration is separated from code.
+
+3.3 Health Endpoints
+
+Both services expose /health endpoints.
+
+These endpoints are useful for checking whether a service is running correctly.
+
+Example:
+
+GET /health
+
+returns service status.
+
+3.4 Docker Compose Networking
+
+Docker Compose allows services to communicate using service names.
+
+The order-service calls:
+
+http://product-service:5001
+
+instead of using localhost.
+
+This works because Docker Compose creates a shared network and gives each service a network identity.
+
+3.5 Health Checks and Restart Policy
+
+The docker-compose.yml file includes health checks for both services and uses:
+
+restart: unless-stopped
+
+This gives a basic level of resilience. If a service crashes unexpectedly, Docker can restart it unless it was manually stopped.
+
+4. Implementation Summary
+4.1 product-service
+
+The product-service was implemented using Flask.
+
+It stores products in an in-memory dictionary:
+
+PRODUCTS = {
+    1: {"id": 1, "name": "Laptop", "price": 1200},
+    2: {"id": 2, "name": "Phone", "price": 650},
+    3: {"id": 3, "name": "Headphones", "price": 120}
+}
+
+It returns JSON responses for product lookup and health checks.
+
+4.2 order-service
+
+The order-service was implemented using Flask and the requests library.
+
+It receives order data, calls product-service, and calculates the total price.
+
+It also includes timeout and retry logic:
+
+response = requests.get(url, timeout=2)
+
+This helps the service fail more gracefully if product-service is unavailable.
+
+4.3 Dockerfiles
+
+Each service has its own Dockerfile.
+
+Both Dockerfiles use:
+
+FROM python:3.12-slim
+
+This keeps the images lightweight.
+
+The dependency file is copied before the application source code to improve build caching.
+
+4.4 Docker Compose
+
+The system was built and started using:
+
+docker compose up --build -d
+
+The running services were checked using:
+
+docker compose ps
+
+Both services ran successfully and exposed ports:
+
+product-service → 5001
+order-service   → 5002
+5. Functional Testing
+5.1 product-service Health Test
+
+Command:
+
+curl http://localhost:5001/health
+
+Result:
+
+{
+  "service": "product-service",
+  "status": "up"
+}
+5.2 Product Lookup Test
+
+Command:
+
+curl http://localhost:5001/products/1
+
+Result:
+
+{
+  "id": 1,
+  "name": "Laptop",
+  "price": 1200
+}
+
+Invalid product test:
+
+curl http://localhost:5001/products/99
+
+Result:
+
+{
+  "error": "Product not found"
+}
+5.3 order-service Health Test
+
+Command:
+
+curl http://localhost:5002/health
+
+Result:
+
+{
+  "service": "order-service",
+  "status": "up"
+}
+5.4 Successful Order Test
+
+Command:
+
+curl -X POST http://localhost:5002/orders -H "Content-Type: application/json" -d "{\"product_id\": 1, \"quantity\": 2}"
+
+Result:
+
+{
+  "message": "Order created",
+  "product": "Laptop",
+  "quantity": 2,
+  "total_price": 2400
+}
+
+This confirms that order-service successfully called product-service.
+
+5.5 Invalid Product Order Test
+
+Command:
+
+curl -X POST http://localhost:5002/orders -H "Content-Type: application/json" -d "{\"product_id\": 99, \"quantity\": 1}"
+
+Result:
+
+{
+  "error": "invalid product"
+}
+
+This confirms that invalid product IDs are handled correctly.
+
+6. Failure Simulation
+6.1 Stopping product-service
+
+To simulate failure, product-service was stopped using:
+
+docker stop product-service
+
+After this, order-service remained running, but it could no longer complete orders because it depends on product-service.
+
+6.2 Order Request During Failure
+
+Command:
+
+curl -X POST http://localhost:5002/orders -H "Content-Type: application/json" -d "{\"product_id\": 2, \"quantity\": 1}"
+
+Result:
+
+{
+  "error": "product-service unavailable"
+}
+
+This shows failure propagation in synchronous microservice communication.
+
+The order-service tried to call product-service, but after timeout and retry attempts, it returned a 503-style error response.
+
+6.3 Recovery
+
+The failed service was restarted using:
+
+docker start product-service
+
+Then the system status was checked using:
+
+docker compose ps
+
+Both services were running again.
+
+7. Reflection Questions
+7.1 Which parts of this lab show the benefits of microservices over a monolith?
+
+This lab shows microservice benefits because product-service and order-service are separated. Each service has its own code, dependencies, Dockerfile, and responsibility.
+
+This separation makes the system easier to understand and allows each service to be developed, packaged, deployed, and scaled independently.
+
+For example, if product lookup becomes heavily used, the product-service could be scaled separately without scaling the order-service.
+
+7.2 Which new complexities were introduced by splitting the system into two services?
+
+Splitting the system into two services introduced network communication complexity.
+
+In a monolith, the order logic could directly call product logic in the same codebase. In this microservices design, order-service must communicate with product-service over HTTP.
+
+This introduces possible problems such as:
+
+network failure
+service unavailable errors
+latency
+timeouts
+retries
+configuration management
+service discovery
+
+So microservices improve modularity, but they also introduce distributed system complexity.
+
+7.3 What would break if network latency increased or one service became slow?
+
+If network latency increased, the order-service would take longer to receive responses from product-service.
+
+Since the communication is synchronous, the client request to order-service cannot finish until product-service responds.
+
+If product-service becomes too slow, the request may timeout, retries may be triggered, and the final response may become:
+
+{
+  "error": "product-service unavailable"
+}
+
+This shows that synchronous microservices can suffer from failure propagation and slow dependency problems.
+
+7.4 Which 12-factor app principles are visible in this implementation?
+
+Several 12-factor principles are visible:
+
+Codebase / service separation
+
+Each service has its own code and can be packaged independently.
+
+Dependencies
+
+Dependencies are declared explicitly in requirements.txt.
+
+Config
+
+Configuration is provided using environment variables, especially:
+
+PRODUCT_SERVICE_URL
+Processes
+
+Each service runs as a stateless process inside a container.
+
+Port binding
+
+Each service exposes itself through a port:
+
+product-service → 5001
+order-service   → 5002
+Logs
+
+Logs can be viewed through Docker Compose using:
+
+docker compose logs
+Disposability
+
+The services can be started, stopped, and restarted using Docker commands.
+
+8. Microservices vs Monolith Reflection
+
+In a monolithic design, product and order logic would exist inside one application. This would make local function calls simpler and avoid network failure between services.
+
+However, the monolith would become harder to scale and maintain as the system grows.
+
+In the microservices design, each service has a clear responsibility. This improves modularity and scalability, but adds complexity because services must communicate over the network.
+
+Therefore, microservices are useful when the system is large enough to benefit from independent deployment and scaling, but for very small applications, a monolith may be simpler.
+
+9. Final Conclusion
+
+This lab demonstrated how to build a simple cloud-native microservices system using Flask and Docker Compose.
+
+The product-service and order-service were implemented as separate services, containerized independently, and orchestrated together using Docker Compose.
+
+The lab showed important cloud-native ideas such as environment-based configuration, health checks, service-to-service communication, timeout/retry behavior, and failure propagation.
+
+The failure simulation showed that microservices are more modular than monoliths, but they require careful handling of network failures and unavailable dependencies.
+
+Overall, this lab demonstrated both the benefits and trade-offs of microservices architecture.

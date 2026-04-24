@@ -1,0 +1,26 @@
+Docker Image Layering Comparison
+
+Images built:
+1. lab3-basic
+2. lab3-multi
+
+Commands used:
+docker build -f Dockerfile.basic -t lab3-basic .
+docker history lab3-basic
+docker image ls
+
+docker build -f Dockerfile.multistage -t lab3-multi .
+docker history lab3-multi
+docker image ls
+
+Observation:
+The basic image and multi-stage image were compared using docker image ls and docker history.
+
+The basic image installs dependencies directly in the final image.
+
+The multi-stage image separates the dependency installation stage from the final runtime stage. This allows the final image to contain only what is needed to run the application.
+
+Layering takeaway:
+Docker images are built as layers. If only app.py changes, Docker can reuse earlier cached layers such as the base image and dependency installation layer, then rebuild only the layer that copies app.py.
+
+Layer order matters because stable files such as requirements.txt should be copied before frequently changing files such as app.py. This improves build caching and reduces rebuild time.

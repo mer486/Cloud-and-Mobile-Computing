@@ -1,0 +1,11 @@
+Redis Replication Results
+
+1. SET lab2_message "hello from primary" on redis-node1 returned: OK
+2. GET lab2_message from redis-node2 returned: "hello from primary"
+3. redis-node2 was stopped to simulate a network partition/failure.
+4. SET partition_test "written while replica is down" on redis-node1 returned: OK
+5. GET partition_test from redis-node1 returned: "written while replica is down"
+6. After restarting redis-node2, GET partition_test from redis-node2 returned: "written while replica is down"
+
+Observation:
+Redis primary continued accepting writes while the replica was unavailable. When the replica returned, it synchronized with the primary.

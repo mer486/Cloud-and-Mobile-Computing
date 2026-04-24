@@ -1,0 +1,78 @@
+🔹 Lab 2 Report
+Student Name: Merola gerges
+Lab: Lab 2
+🔴 Task 1: Redis Replication and CAP Theorem
+🔸 Experiment Description
+In this task, two Redis nodes were deployed:
+redis-node1 as the primary node
+redis-node2 as a replica
+A key-value pair was written to the primary node and then read from the replica node to verify replication. Then, a failure was simulated by stopping the replica node.
+🔸 Observations
+Writing to redis-node1 using:
+
+ SET lab2_message "hello from primary"
+
+ returned OK
+
+
+Reading from redis-node2 using:
+
+ GET lab2_message
+
+ returned "hello from primary"
+
+
+After stopping redis-node2, writes to redis-node1 still succeeded.
+When the replica was restarted, it synchronized and successfully retrieved:
+
+ GET partition_test
+
+ returning "written while replica is down"
+
+
+🔸 Analysis (CAP Theorem)
+During the simulated partition:
+The primary node remained available and accepted writes
+The replica node was unavailable
+This demonstrates that Redis prioritizes:
+Availability + Partition Tolerance (AP)
+Consistency was temporarily lost while the replica was down, but restored after recovery. This behavior is known as:
+Eventual Consistency
+
+🔵 Task 2 — Raft Consensus using etcd
+🔸 Experiment Description
+A 3-node etcd cluster was deployed to simulate the Raft consensus protocol. Key-value operations were performed, and leader election behavior was observed.
+🔸 Observations
+A key-value pair was successfully written and read:
+
+ etcdctl put foo bar
+etcdctl get foo
+
+
+Initial leader was identified as:
+
+ etcd2
+
+
+After stopping the leader (etcd2), a new leader was elected:
+
+ etcd1
+
+
+The system continued functioning, and new writes were successful after failover.
+🔸 Analysis (Raft Behavior)
+The etcd cluster maintained consistency by electing a single leader
+When the leader failed, a new leader was elected automatically
+The system continued to accept writes without data inconsistency
+This demonstrates:
+Leader Election + Fault Tolerance + Strong Consistency
+🔹 Key Learning Outcomes
+Redis replication allows data to be copied across nodes but may sacrifice consistency during failures
+Redis follows an AP model with eventual consistency
+etcd uses the Raft consensus algorithm to maintain strong consistency
+Leader election ensures system availability even after node failure
+Distributed systems must balance consistency, availability, and partition tolerance
+
+🔹 Conclusion
+This lab demonstrated the behavior of distributed systems under normal and failure conditions. Redis showed eventual consistency under partition, while etcd maintained strong consistency using leader election and consensus mechanisms.
+

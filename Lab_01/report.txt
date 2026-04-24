@@ -1,0 +1,82 @@
+Student Name: Merola Gerges
+Lab: Lab 1
+
+🔹 Part A:  VM vs Container Comparison
+
+In this experiment, a virtual machine (VM) and a Docker container were launched locally and compared based on startup time, memory usage, process count, and disk usage.
+
+🔸 Observations:
+
+   Startup Time  :
+  The virtual machine took significantly longer to start compared to the container. The VM required loading a full operating system, while the container started almost instantly.
+
+   Memory Usage  :
+  The VM consumed more memory because it runs a complete guest OS. The container used less memory since it shares the host system kernel.
+
+   Process Count  :
+  Inside the VM, many system processes were running as part of the OS. In contrast, the container had only a few processes, mainly related to the application.
+
+   Disk Usage  :
+  The VM had a larger and more complex filesystem, while the container used a lightweight layered filesystem.
+
+🔸 Conclusion:
+
+Containers are more efficient than virtual machines for microservices because they are lightweight, faster to start, and use fewer resources. VMs, however, provide stronger isolation and are useful when running different operating systems or when strict security is required.
+
+
+  🔹 Part B: Cloud Infrastructure Exploration
+
+An AWS EC2 instance was launched and inspected to explore the underlying infrastructure.
+
+ 🔸 Observations:
+
+  The system information revealed references to AWS infrastructure components such as Nitro.
+  Nitro is visible in system logs but cannot be directly accessed or controlled by the user.
+  Tools like `top` showed running processes within the instance.
+
+ 🔸 Explanation:
+
+AWS uses the Nitro system to separate virtualization responsibilities into hardware and lightweight software components. This design improves performance by offloading tasks from the CPU and enhances security by isolating user instances from the underlying infrastructure.
+
+🔹 Part C: Tail Latency Simulation
+
+A Flask web application was created to simulate random response delays. The application was tested using ApacheBench (`ab`) with 100 requests and concurrency level of 10.
+
+ 🔸 Results Summary:
+
+  50% of requests completed in about   79 ms  
+  90% of requests took up to   279 ms  
+  Maximum latency reached   389 ms  
+
+ 🔸 Analysis:
+
+Most requests were fast, but a small number of requests took significantly longer. This behavior is known as   tail latency  , where the slowest responses (the “tail”) can negatively impact overall system performance.
+
+The delay was caused by the exponential random distribution used in the application, which generates mostly small delays but occasionally large ones.
+
+ 🔸 Conclusion:
+
+Tail latency becomes more noticeable as the number of parallel requests increases. Even if most responses are fast, slow requests can affect user experience and system performance.
+
+  🔹 Discussion Answers
+
+    1. Why does AWS split Nitro into hardware components?
+
+AWS separates Nitro into hardware components to improve performance and security. Hardware-based virtualization reduces overhead and ensures better isolation between users and infrastructure.
+
+
+    2. In which scenarios would you use VMs over containers?
+
+VMs are used when:
+
+  Strong isolation is required
+  Different operating systems are needed
+  Full system control is necessary
+  Running legacy or specialized applications
+
+    3. How does tail latency change with the number of parallel calls?
+
+As the number of parallel requests increases, tail latency becomes more significant. More requests increase the probability of encountering slow responses, which affects overall system performance.
+
+
+

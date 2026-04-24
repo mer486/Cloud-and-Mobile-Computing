@@ -1,0 +1,57 @@
+Lab 4 Results — Microservices and Cloud-Native Design
+
+Services:
+- product-service runs on port 5001.
+- order-service runs on port 5002.
+- Both services were built and started using Docker Compose.
+
+Commands used:
+docker compose up --build -d
+docker compose ps
+
+Product-service tests:
+1. curl http://localhost:5001/health
+Result:
+{"service":"product-service","status":"up"}
+
+2. curl http://localhost:5001/products/1
+Result:
+{"id":1,"name":"Laptop","price":1200}
+
+3. curl http://localhost:5001/products/99
+Result:
+{"error":"Product not found"}
+
+Order-service tests:
+1. curl http://localhost:5002/health
+Result:
+{"service":"order-service","status":"up"}
+
+2. curl -X POST http://localhost:5002/orders -H "Content-Type: application/json" -d "{\"product_id\": 1, \"quantity\": 2}"
+Result:
+{
+  "message": "Order created",
+  "product": "Laptop",
+  "quantity": 2,
+  "total_price": 2400
+}
+
+3. curl -X POST http://localhost:5002/orders -H "Content-Type: application/json" -d "{\"product_id\": 99, \"quantity\": 1}"
+Result:
+{"error":"invalid product"}
+
+Failure simulation:
+1. product-service was stopped using:
+docker stop product-service
+
+2. An order request was sent while product-service was unavailable:
+curl -X POST http://localhost:5002/orders -H "Content-Type: application/json" -d "{\"product_id\": 2, \"quantity\": 1}"
+
+Result:
+{"error":"product-service unavailable"}
+
+Recovery:
+product-service was restarted using:
+docker start product-service
+
+docker compose ps confirmed both services were running again.

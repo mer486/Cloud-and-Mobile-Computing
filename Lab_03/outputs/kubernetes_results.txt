@@ -1,0 +1,30 @@
+Kubernetes Results
+
+Cluster:
+- A kind cluster named lab3-cluster was created successfully.
+- kubectl cluster-info confirmed that the Kubernetes control plane was running.
+- kubectl get nodes -o wide showed the node in Ready state.
+
+Deployment and Service:
+- lab3-web Deployment was created with 3 replicas.
+- kubectl get pods -o wide showed 3 running Pods.
+- lab3-web-svc Service was created.
+- The app was accessed using port-forward on local port 8081.
+- curl http://localhost:8081/ returned: Hello from Lab 3
+- curl http://localhost:8081/health returned: ok
+
+Scheduling:
+- The node was labeled with node-role=general.
+- deployment.yaml was updated with nodeSelector:
+  node-role: general
+- Re-applying the Deployment caused Kubernetes to perform a rolling update and recreate Pods matching the scheduling rule.
+
+Self-Healing:
+- One lab3-web Pod was deleted manually.
+- Kubernetes automatically created a replacement Pod to maintain the desired replica count of 3.
+
+Probes:
+- probe-deployment.yaml was applied with readiness and liveness probes using /health.
+- kubectl describe pod showed both readinessProbe and livenessProbe configured.
+- One probe Pod was deleted manually.
+- Kubernetes created a replacement Pod to maintain the desired replica count of 2.

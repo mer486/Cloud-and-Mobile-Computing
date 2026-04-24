@@ -1,0 +1,347 @@
+1. Lab Overview
+
+In this lab, I explored how containers work internally and how Kubernetes manages containers at scale. The lab covered container isolation using namespaces, resource control using cgroups, Docker image layering, Kubernetes deployments and services, scheduling using node labels, and self-healing behavior.
+
+The main goal was to understand how containerized applications move from being single isolated processes to managed applications inside a Kubernetes cluster.
+
+2. Part A — Containers, Namespaces, and Cgroups
+2.1 Container Isolation Observation
+
+I started an interactive Ubuntu container named nsdemo using:
+
+docker run --rm -it --name nsdemo ubuntu:22.04 bash
+
+Inside the container, I inspected the hostname, processes, network interfaces, mounted filesystems, and cgroup information.
+
+The commands used were:
+
+hostname
+ps -ef
+ip addr
+mount | head
+cat /proc/1/cgroup
+2.2 Namespace Observations
+Hostname Namespace
+
+The container had its own hostname that was different from the host machine. This shows that the container has an isolated hostname namespace and can behave as if it is a separate machine.
+
+PID Namespace
+
+Inside the container, the main shell process appeared as PID 1. However, from Docker’s host-side view, the container process was managed as a normal process by Docker. This shows that the container has its own PID namespace.
+
+This means the container sees its own process tree, while the host can still observe and manage the container process externally.
+
+Network Namespace
+
+The container had its own network interface, such as eth0, and its own IP address, for example:
+
+172.17.0.2
+
+This IP address is separate from the host machine’s IP address. This proves that the container has its own network namespace.
+
+Mount Namespace
+
+The command:
+
+mount | head
+
+showed that the container has its own filesystem view. Although the files are stored using Docker layers on the host, the container sees its own isolated filesystem.
+
+2.3 Cgroup Observation
+
+The command:
+
+cat /proc/1/cgroup
+
+showed that the container process is associated with cgroups.
+
+Namespaces isolate what a process can see, while cgroups control how much resources the process can use. Together, namespaces and cgroups allow containers to behave like isolated and controlled execution environments.
+
+2.4 Part A Conclusion
+
+Containers are not full virtual machines. They are ordinary processes running on the host, but they are isolated using namespaces and controlled using cgroups. This makes containers lightweight compared to virtual machines.
+
+3. Part B — Docker Image Layering
+3.1 Application Files
+
+A simple Flask application was created using app.py and requirements.txt.
+
+The application has two routes:
+
+/        → returns "Hello from Lab 3"
+/health  → returns "ok"
+
+The /health endpoint was later used for Kubernetes readiness and liveness probes.
+
+3.2 Basic Docker Image
+
+The basic image was built using Dockerfile.basic.
+
+Build command:
+
+docker build -f Dockerfile.basic -t lab3-basic .
+
+The image was inspected using:
+
+docker history lab3-basic
+docker image ls
+
+The basic Dockerfile installs dependencies directly in the final image.
+
+3.3 Multi-Stage Docker Image
+
+The multi-stage image was built using Dockerfile.multistage.
+
+Build command:
+
+docker build -f Dockerfile.multistage -t lab3-multi .
+
+The image was inspected using:
+
+docker history lab3-multi
+docker image ls
+
+The multi-stage Dockerfile separates the build stage from the runtime stage. The first stage installs dependencies, and the second stage copies only the needed installed files and application code into the final image.
+
+3.4 Image Layering Analysis
+
+Docker images are built as layers. Each instruction in the Dockerfile creates or reuses a layer.
+
+Layering is important because Docker can reuse cached layers when files do not change. For example, if only app.py changes, Docker can reuse the base image and dependency installation layers, then rebuild only the application copy layer.
+
+This is why Dockerfile order matters. Stable files such as requirements.txt should be copied before frequently changing files like app.py.
+
+3.5 Basic vs Multi-Stage Comparison
+Feature	Basic Image	Multi-Stage Image
+Build style	Installs everything in one final image	Uses separate builder and runtime stages
+Final image content	Contains runtime and installed dependencies	Contains only required runtime files
+Caching	Reuses layers if unchanged	Also benefits from caching
+Cleanliness	Less clean	Cleaner and more production-oriented
+Use case	Simple development image	Better for production-style builds
+3.6 Part B Conclusion
+
+Docker image layering improves build speed, storage efficiency, and maintainability. Multi-stage builds are useful because they separate build-time work from runtime execution, making final images cleaner and more suitable for deployment.
+
+4. Part C — Kubernetes Orchestration with kind
+4.1 Creating the Cluster
+
+A local Kubernetes cluster was created using kind:
+
+kind create cluster --name lab3-cluster --image kindest/node:v1.30.0
+
+The cluster was verified using:
+
+kubectl cluster-info
+kubectl get nodes -o wide
+
+The node appeared in the Ready state, which confirmed that the Kubernetes cluster was working.
+
+4.2 Loading Docker Images into kind
+
+Because kind runs Kubernetes nodes inside Docker containers, local Docker images must be loaded into the kind cluster manually.
+
+The following commands were used:
+
+kind load docker-image lab3-basic --name lab3-cluster
+kind load docker-image lab3-multi --name lab3-cluster
+
+This made the images available inside the Kubernetes node.
+
+4.3 Deployment
+
+A Kubernetes Deployment named lab3-web was created with 3 replicas.
+
+The Deployment used the image:
+
+lab3-multi
+
+The Deployment file specified:
+
+replicas: 3
+
+This means Kubernetes should always keep 3 running Pods for this application.
+
+The Deployment was applied using:
+
+kubectl apply -f deployment.yaml
+
+The Pods were inspected using:
+
+kubectl get pods -o wide
+kubectl get deployments
+
+Three Pods were created and reached the Running state.
+
+4.4 Service Access
+
+A Kubernetes Service named lab3-web-svc was created to expose the Pods internally.
+
+The Service mapped:
+
+Service port 80 → Container port 5000
+
+The Service was applied using:
+
+kubectl apply -f service.yaml
+
+Since the Service type was ClusterIP, it was accessed locally using port forwarding:
+
+kubectl port-forward service/lab3-web-svc 8081:80
+
+The application was tested using:
+
+curl http://localhost:8081/
+curl http://localhost:8081/health
+
+The results were:
+
+Hello from Lab 3
+ok
+4.5 Part C Conclusion
+
+The Deployment expressed the desired state of the application, while Kubernetes created and managed the Pods automatically. The Service provided a stable access point to the application, even though the actual Pods are replaceable.
+
+5. Part D — Scheduling and Placement
+5.1 Node Labeling
+
+The Kubernetes node was labeled using:
+
+kubectl label nodes --all node-role=general
+
+The labels were verified using:
+
+kubectl get nodes --show-labels
+5.2 Node Selector
+
+The Deployment was updated with:
+
+nodeSelector:
+  node-role: general
+
+This tells Kubernetes to schedule the Pods only on nodes that have the label:
+
+node-role=general
+
+After applying the updated Deployment:
+
+kubectl apply -f deployment.yaml
+
+Kubernetes performed a rolling update and recreated the Pods using the updated scheduling rule.
+
+5.3 Scheduling Analysis
+
+This is different from manually choosing a specific machine name. Instead of saying “run on this exact server,” the Deployment says “run on any node that has this property.”
+
+This improves maintainability because nodes can be replaced, added, or changed without rewriting the application deployment. Kubernetes can make scheduling decisions based on labels and cluster state.
+
+6. Part E — Self-Healing and Health Probes
+6.1 Pod Deletion Self-Healing
+
+One Pod from the lab3-web Deployment was manually deleted using:
+
+kubectl delete pod lab3-web-c457fd886-bcm4x
+
+After deletion, Kubernetes automatically created a replacement Pod.
+
+This happened because the Deployment desired state was:
+
+3 replicas
+
+When one Pod was deleted, the actual state became 2 Pods. Kubernetes reconciled the actual state back to the desired state by creating a new Pod.
+
+This is called reconciliation.
+
+6.2 Readiness and Liveness Probes
+
+A second Deployment named lab3-web-probe was created using probe-deployment.yaml.
+
+It had 2 replicas and included:
+
+readinessProbe:
+  httpGet:
+    path: /health
+    port: 5000
+
+livenessProbe:
+  httpGet:
+    path: /health
+    port: 5000
+
+The Deployment was applied using:
+
+kubectl apply -f probe-deployment.yaml
+
+The probes were verified using:
+
+kubectl describe pod <pod-name>
+
+The description showed both readiness and liveness probes configured.
+
+6.3 Container Restart Test
+
+To test container recovery, the container was stopped from the kind node runtime using crictl.
+
+The container was stopped using:
+
+docker exec lab3-cluster-control-plane crictl stop <container_id>
+
+After this, Kubernetes restarted the container inside the same Pod.
+
+The evidence was shown by the Pod restart count:
+
+RESTARTS = 1
+
+This means the Pod was not replaced. Instead, the container inside the existing Pod was restarted.
+
+6.4 Difference Between Pod Replacement and Container Restart
+
+There are two different recovery behaviors:
+
+Failure Type	Kubernetes Reaction
+Pod is deleted	Kubernetes creates a new replacement Pod
+Container inside Pod stops	Kubernetes restarts the container inside the same Pod
+
+In the Pod deletion test, the Pod name changed because a new Pod was created.
+
+In the container restart test, the Pod stayed the same but the restart count increased.
+
+7. Reflection Questions
+7.1 Why do namespaces alone not guarantee fair resource use?
+
+Namespaces only isolate what a process can see, such as processes, network interfaces, hostname, and filesystem. They do not limit how much CPU or memory the process can consume. Without cgroups, one container could consume too many resources and affect other containers or the host.
+
+7.2 How do cgroups improve cluster stability?
+
+Cgroups improve stability by limiting and controlling resource usage. They can restrict CPU, memory, and other resources so that one container cannot overload the whole system. This helps Kubernetes run many workloads safely on the same cluster.
+
+7.3 Why is Docker image layering important for large-scale orchestration?
+
+Docker image layering is important because it improves caching, reduces rebuild time, and saves storage. In large-scale systems, many containers may use similar base layers, so reusing layers makes deployments faster and more efficient.
+
+7.4 What does Kubernetes mean by desired state?
+
+Desired state means the condition that the user declares in Kubernetes configuration. For example, if a Deployment says replicas: 3, Kubernetes continuously tries to keep 3 Pods running. If the actual state changes, Kubernetes works to bring it back to the desired state.
+
+7.5 How is self-healing different from traditional manual operations?
+
+In traditional manual operations, an administrator would have to notice the failure and restart or replace the application manually. In Kubernetes, the system automatically detects that the actual state does not match the desired state and repairs it without manual intervention.
+
+7.6 Why are readiness probes and liveness probes not interchangeable?
+
+Readiness probes check whether the application is ready to receive traffic. If readiness fails, Kubernetes stops sending traffic to the Pod.
+
+Liveness probes check whether the application is still alive. If liveness fails, Kubernetes restarts the container.
+
+They are not interchangeable because readiness controls traffic routing, while liveness controls container restart behavior.
+
+7.7 What is one limitation of observing scheduling in a single-node kind cluster compared with a real multi-node cluster?
+
+In a single-node kind cluster, all Pods must run on the same node, so scheduling behavior is limited. In a real multi-node cluster, Kubernetes can choose between multiple nodes based on available resources, labels, affinity rules, taints, tolerations, and failure zones.
+
+8. Final Conclusion
+
+This lab demonstrated how containers work internally and how Kubernetes manages containerized applications at scale. Containers rely on namespaces for isolation and cgroups for resource control. Docker images are built in reusable layers, and multi-stage builds help create cleaner images.
+
+Kubernetes adds orchestration by managing Deployments, Services, scheduling, health probes, and self-healing. The lab showed that Kubernetes continuously compares the desired state with the actual state and automatically repairs failures through reconciliation.
+
+Overall, this lab connected low-level container concepts with high-level orchestration behavior.
